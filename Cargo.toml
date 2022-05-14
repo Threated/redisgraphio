@@ -1,0 +1,12 @@
+[package]
+name = "redisgraphio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+redis = { version = "^0.21.0", optional = true }
+
+[features]
+default = ['redis']
+tokio-comp = ['redis/tokio-comp']
+async-std-comp = ['redis/async-std-comp']
