@@ -1,4 +1,6 @@
-use redis::{Value, RedisResult, FromRedisValue, ErrorKind, RedisError, from_redis_value};
+use redis::{Value, RedisResult, FromRedisValue, from_redis_value};
+
+use crate::helpers::create_rediserror;
 
 /// Official enum from redis-graph https://github.com/RedisGraph/RedisGraph/blob/master/src/resultset/formatters/resultset_formatter.h#L20-L33
 mod Types {
@@ -29,18 +31,42 @@ pub enum GraphValue {
     Relation(Value),
 }
 
+/*
+bulk(bulk(bulk(int(1), string-data('"4"')), bulk(int(1), string-data('"7"'))), bulk(bulk(bulk(int(3), int(4)), bulk(int(3), int(7)))), bulk(string-data('"Cached execution: 1"')
+bulk(
+    # Header
+    bulk(
+        bulk(
+            int(1), string-data('"4"')
+        ),
+        bulk(
+            int(1), string-data('"7"')
+        )
+    ),
+    # Body
+    bulk(
+        # Matches
+        bulk(
+            # Returns
+            bulk(
+                int(3), int(4)
+            ), 
+            bulk(
+                int(3), int(7)
+            )
+        )
+    ),
+    # Metadata
+    bulk(
+        string-data('"Cached execution: 1"'),
+        string-data('"Query internal execution time: 0.109212 milliseconds"')
+    ))
+*/ 
+
 pub trait FromGraphValue: Sized {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self>;
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self>;
 }
 
-/// Helper for creating Rediserror
-fn create_rediserror(desc: String) -> RedisError {
-    (
-        ErrorKind::TypeError,
-        "Parsing Error",
-        desc
-    ).into()
-}
 
 /// Helper macro to apply a macro to each following type
 macro_rules! apply_macro {
@@ -55,10 +81,10 @@ macro_rules! apply_macro {
 macro_rules! from_graph_value_for_num {
     ( $t:ty ) => {
         impl FromGraphValue for $t {
-            fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
-                match *value {
+            fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+                match value {
                     GraphValue::Integer(val) => Ok(val as $t),
-                    _ => Err(create_rediserror(format!(concat!("Cant convert {:?} to ", stringify!($t)), value)))
+                    _ => Err(create_rediserror(&format!(concat!("Cant convert {:?} to ", stringify!($t)), value)))
                 }
             }
         }
@@ -67,19 +93,37 @@ macro_rules! from_graph_value_for_num {
 apply_macro!(from_graph_value_for_num, i8, i16, i32, i64, u8, u16, u32, u64);
 
 impl FromGraphValue for bool {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
-        match *value {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
             GraphValue::Boolean(val) => Ok(val),
-            _ => Err(create_rediserror(format!("Cant convert {:?} to bool", value)))
+            _ => Err(create_rediserror(&format!("Cant convert {:?} to bool", value)))
         }
     }
 }
 
 impl <T: FromGraphValue>FromGraphValue for Vec<T> {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
-        match *value {
-            GraphValue::Array(ref val) => Ok(val.iter().map(FromGraphValue::from_graph_value).collect::<Result<Self, _>>()?),
-            _ => Err(create_rediserror(format!("Cant convert {:?} to Vec", value)))
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
+            GraphValue::Array(val) => Ok(
+                val.into_iter()
+                    .map(FromGraphValue::from_graph_value)
+                    .collect::<RedisResult<Self>>()?),
+            _ => Err(create_rediserror(&format!("Cant convert {:?} to Vec", value)))
+        }
+    }
+}
+
+impl FromGraphValue for GraphValue {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        Ok(value)
+    }
+}
+
+impl FromGraphValue for String {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
+            GraphValue::String(s) => Ok(s),
+            _ => Err(create_rediserror(&format!("Cant convert {:?} to String", value)))
         }
     }
 }
@@ -93,23 +137,22 @@ macro_rules! from_graph_value_for_tuple {
             // we have local variables named T1 as dummies and those
             // variables are unused.
             #[allow(non_snake_case, unused_variables)]
-            fn from_graph_value(v: &GraphValue) -> RedisResult<($($name,)*)> {
-                match *v {
-                    GraphValue::Array(ref items) => {
+            fn from_graph_value(v: GraphValue) -> RedisResult<($($name,)*)> {
+                match v {
+                    GraphValue::Array(mut items) => {
                         // hacky way to count the tuple size
                         let mut n = 0;
                         $(let $name = (); n += 1;)*
                         if items.len() != n {
-                            return Err(create_rediserror("Array has wrong length to convert to Tuple".to_owned()))
+                            return Err(create_rediserror("Array has wrong length to convert to Tuple"))
                         }
 
-                        // this is pretty ugly too.  The { i += 1; i - 1} is rust's
-                        // postfix increment :)
-                        let mut i = 0;
-                        Ok(($({let $name = (); FromGraphValue::from_graph_value(
-                             &items[{ i += 1; i - 1 }])?},)*))
+                        Ok(($({
+                            let $name = ();
+                            FromGraphValue::from_graph_value(items.remove(0))?
+                        },)*))
                     }
-                    _ => Err(create_rediserror(format!("Can not create Tuple from {:?}", v)))
+                    _ => Err(create_rediserror(&format!("Can not create Tuple from {:?}", v)))
                 }
             }
         }
@@ -142,7 +185,7 @@ impl FromRedisValue for GraphValue {
                 _ => Ok(GraphValue::Scalar(data[1].to_owned())),
             }
             value => Err(create_rediserror(
-                format!("Couldnt convert {:?} to GraphValue", value)
+                &format!("Couldnt convert {:?} to GraphValue", value)
             ))
         }
     }
