@@ -1,0 +1,136 @@
+use paste::paste;
+
+use crate::{query, GraphQuery, GraphCommands, GraphValue};
+
+#[test]
+fn test_query_macro() {
+    assert_eq!(
+        query!("Return 1"), 
+        GraphQuery {
+            query: "Return 1", read_only: false, params: vec![]
+        }
+    );
+    assert_eq!(
+        query!("Return 1", true), 
+        GraphQuery {
+            query: "Return 1", read_only: true, params: vec![]
+        }
+    );
+    assert_eq!(
+        query!("Return 1", {
+            "a" => 4,
+            "b" => "test"
+        }), 
+        GraphQuery {
+            query: "Return 1", read_only: false, params: vec![
+                ("a", 4.into()),
+                ("b", "test".into())
+            ]
+        }
+    );
+    assert_eq!(
+        query!("Return 1", {
+            "a" => 4.5,
+            "b" => "test"
+        }, true), 
+        GraphQuery {
+            query: "Return 1", read_only: true, params: vec![
+                ("a", 4.5.into()),
+                ("b", "test".into())
+            ]
+        }
+    );
+}
+
+fn get_client() -> redis::Client {
+    redis::Client::open("redis://localhost:6379/").unwrap()
+}
+
+#[cfg(any(feature = "tokio-comp", feature = "async-std-comp"))]
+async fn async_con() -> redis::aio::Connection {
+    get_client().get_async_connection().await.unwrap()
+}
+
+fn sync_con() -> redis::Connection {
+    get_client().get_connection().unwrap()
+}
+
+#[cfg(feature = "tokio-comp")]
+fn tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()
+        .unwrap()
+}
+
+macro_rules! test_parse {
+    ($name:ident, $query:expr, {$($types:ty => $values:expr),+}) => {
+        paste! {
+            #[test]
+            fn [<parse_ $name>]() {
+                let data: Vec<($($types,)*)> = sync_con().graph_query("test", $query).unwrap().data;
+                assert_eq!(data[0], ($($values,)*));
+            }
+
+            #[test]
+            #[cfg(feature = "tokio-comp")]
+            fn [<test_parse_ $name _tokio>]() {
+                use crate::AsyncGraphCommands;
+                let data: Vec<($($types,)*)> = tokio_runtime().block_on(async move {
+                    async_con().await.graph_query("test", $query).await.unwrap().data
+                });
+                assert_eq!(data[0], ($($values,)*));
+            }
+
+            #[test]
+            #[cfg(feature = "async-std-comp")]
+            fn [<test_parse_ $name _async_std>]() {
+                use crate::AsyncGraphCommands;
+                let data: Vec<($($types,)*)> = async_std::task::block_on(async move {
+                    async_con().await.graph_query("test", $query).await.unwrap().data
+                });
+                assert_eq!(data[0], ($($values,)*));
+            }
+        }
+    };
+}
+
+test_parse!{ints,
+    query!("Return 1, 2, 3, 4, 5, 6, 7, 18446744073709551617"), // 2**64+1 == 18446744073709551617
+    {
+        u8 => 1,
+        u16 => 2,
+        u32 => 3,
+        u64 => 4,
+        i8 => 5,
+        i16 => 6,
+        i32 => 7,
+        i64 => 0x7fffffffffffffff // Redis only allows 64bit ints so this is the expected interger overflow value
+    }
+}
+
+test_parse!{vec,
+    query!("Return [1, 2, 3, 4]"),
+    {
+        Vec<i32> => vec![1, 2, 3, 4]
+    }
+}
+
+test_parse!{null,
+    query!("Return null"),
+    {
+        GraphValue => GraphValue::Null
+    }
+}
+
+test_parse!{string,
+    query!(r#"Return "test", 'test', $other"#, {
+        "other" => r#"a\"b\'c'd"e"#
+    }),
+    {
+        String => "test".to_string(),
+        String => "test".to_string(),
+        String => r#"a\"b\'c'd"e"#.to_string()
+    }
+}
+

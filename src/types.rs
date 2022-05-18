@@ -33,7 +33,7 @@ impl<T: FromGraphValue> GraphResponse<T> {
                     }),
                     3 => {
                         let (header, temp, statistics): (Vec<Value>, Vec<Vec<GraphValue>>, Vec<String>) = from_redis_value(value)?;
-                        
+
                         Ok(GraphResponse {
                             header: <GraphResponse>::parse_header(header),
                             data: temp.into_iter().map(|arr|
@@ -74,7 +74,7 @@ impl GraphQuery {
     }
 
     pub fn construct_query(&self) -> String {
-        self.parse_params() + self.query
+        self.parse_params() + &self.query
     }
 
     fn parse_params(&self) -> String {
@@ -86,7 +86,7 @@ impl GraphQuery {
             prepend.push_str(&match value {
                 Parameter::Int(int) => format!("{}={} ", key, int),
                 Parameter::Double(double) => format!("{}={} ", key, double),
-                Parameter::String(string) => format!(r#"{}="{}" "#, key, string),
+                Parameter::String(string) => format!(r#"{}="{}" "#, key, string.escape_default()),
             });
         });
         prepend

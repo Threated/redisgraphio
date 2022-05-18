@@ -18,7 +18,7 @@ mod Types {
 	pub const VALUE_POINT: i64 = 11;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GraphValue {
     Scalar(Value),
     Node(Value),

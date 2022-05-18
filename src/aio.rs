@@ -1,15 +1,19 @@
 use redis::{aio::ConnectionLike, RedisFuture, cmd};
 
-use crate::{GraphValue, types::GraphQuery};
+use crate::{types::GraphQuery, FromGraphValue, GraphResponse};
 
 
 
 pub trait AsyncGraphCommands: ConnectionLike + Send + Sized {
-    fn graph_query<'a, Q>(
+    fn graph_query<'a, Q, RT>(
         &'a mut self,
         graph: &'a str,
         query: Q,
-    ) -> RedisFuture<GraphValue> where Q: Into<GraphQuery> + Send + 'a {
+    ) -> RedisFuture<GraphResponse<RT>>
+    where 
+        Q: Into<GraphQuery> + Send + 'a,
+        RT: FromGraphValue
+    {
         Box::pin(async move {
             let query = query.into();
             cmd(query.read_type())
