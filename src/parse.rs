@@ -77,8 +77,8 @@ macro_rules! apply_macro {
     };
 }
 
-/// Macro for implementing the FromGraphValue Trait for a numeric type
-macro_rules! from_graph_value_for_num {
+/// Macro for implementing the FromGraphValue Trait for a int type
+macro_rules! from_graph_value_for_int {
     ( $t:ty ) => {
         impl FromGraphValue for $t {
             fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
@@ -90,7 +90,21 @@ macro_rules! from_graph_value_for_num {
         }
     };
 }
-apply_macro!(from_graph_value_for_num, i8, i16, i32, i64, u8, u16, u32, u64);
+/// Macro for implementing the FromGraphValue Trait for a float type
+macro_rules! from_graph_value_for_float {
+    ( $t:ty ) => {
+        impl FromGraphValue for $t {
+            fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+                match value {
+                    GraphValue::Double(val) => Ok(val as $t),
+                    _ => Err(create_rediserror(&format!(concat!("Cant convert {:?} to ", stringify!($t)), value)))
+                }
+            }
+        }
+    };
+}
+apply_macro!(from_graph_value_for_int, i8, i16, i32, i64, u8, u16, u32, u64);
+apply_macro!(from_graph_value_for_float, f32, f64);
 
 impl FromGraphValue for bool {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
@@ -133,7 +147,7 @@ macro_rules! from_graph_value_for_tuple {
     () => ();
     ($($name:ident,)+) => (
         #[doc(hidden)]
-        impl<$($name: FromGraphValue),*> FromGraphValue for ($($name,)*) {
+        impl<$($name: FromGraphValue),+> FromGraphValue for ($($name,)*) {
             // we have local variables named T1 as dummies and those
             // variables are unused.
             #[allow(non_snake_case, unused_variables)]
@@ -144,7 +158,7 @@ macro_rules! from_graph_value_for_tuple {
                         let mut n = 0;
                         $(let $name = (); n += 1;)*
                         if items.len() != n {
-                            return Err(create_rediserror("Array has wrong length to convert to Tuple"))
+                            return Err(create_rediserror(&format!("Wrong length to create Tuple from {:?}", &items)))
                         }
 
                         Ok(($({
@@ -181,7 +195,13 @@ impl FromRedisValue for GraphValue {
                 Value::Int(VALUE_INTEGER) => Ok(GraphValue::Integer(from_redis_value(&data[1])?)),
                 Value::Int(VALUE_ARRAY) => Ok(GraphValue::Array(from_redis_value(&data[1])?)),
                 Value::Int(VALUE_STRING) => Ok(GraphValue::String(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_BOOLEAN) => Ok(GraphValue::Boolean(from_redis_value(&data[1])?)),
+                Value::Int(VALUE_BOOLEAN) => Ok(GraphValue::Boolean({
+                    match from_redis_value::<String>(&data[1])?.as_str() {
+                        "true" => true,
+                        "false" => false,
+                        _ => return Err(create_rediserror(&format!("Cant convert {:?} to bool", &data[1])))
+                    }
+                })),
                 _ => Ok(GraphValue::Scalar(data[1].to_owned())),
             }
             value => Err(create_rediserror(

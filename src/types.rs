@@ -33,7 +33,7 @@ impl<T: FromGraphValue> GraphResponse<T> {
                     }),
                     3 => {
                         let (header, temp, statistics): (Vec<Value>, Vec<Vec<GraphValue>>, Vec<String>) = from_redis_value(value)?;
-
+                        
                         Ok(GraphResponse {
                             header: <GraphResponse>::parse_header(header),
                             data: temp.into_iter().map(|arr|

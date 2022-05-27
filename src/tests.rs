@@ -74,7 +74,7 @@ macro_rules! test_parse {
 
             #[test]
             #[cfg(feature = "tokio-comp")]
-            fn [<test_parse_ $name _tokio>]() {
+            fn [<parse_ $name _tokio>]() {
                 use crate::AsyncGraphCommands;
                 let data: Vec<($($types,)*)> = tokio_runtime().block_on(async move {
                     async_con().await.graph_query("test", $query).await.unwrap().data
@@ -84,7 +84,7 @@ macro_rules! test_parse {
 
             #[test]
             #[cfg(feature = "async-std-comp")]
-            fn [<test_parse_ $name _async_std>]() {
+            fn [<parse_ $name _async_std>]() {
                 use crate::AsyncGraphCommands;
                 let data: Vec<($($types,)*)> = async_std::task::block_on(async move {
                     async_con().await.graph_query("test", $query).await.unwrap().data
@@ -109,6 +109,25 @@ test_parse!{ints,
     }
 }
 
+test_parse!{double,
+    query!("Return 1.0, 3.3, 4.67"),
+    {
+        f32 => 1.0,
+        f32 => 3.3,
+        f64 => 4.67
+    }
+}
+
+test_parse!{boolean,
+    query!("Return 1.0 = 1.0, 0=1, true"),
+    {
+        bool => true,
+        bool => false,
+        bool => true
+    }
+}
+
+
 test_parse!{vec,
     query!("Return [1, 2, 3, 4]"),
     {
@@ -124,13 +143,15 @@ test_parse!{null,
 }
 
 test_parse!{string,
-    query!(r#"Return "test", 'test', $other"#, {
-        "other" => r#"a\"b\'c'd"e"#
+    query!(r#"Return "test", 'test', $other, $a"#, {
+        "other" => r#"a\"b\'c'd"e"#,
+        "a" => r#"\" Return 1337//"#
     }),
     {
         String => "test".to_string(),
         String => "test".to_string(),
-        String => r#"a\"b\'c'd"e"#.to_string()
+        String => r#"a\"b\'c'd"e"#.to_string(),
+        String => r#"\" Return 1337//"#.to_string()
     }
 }
 
