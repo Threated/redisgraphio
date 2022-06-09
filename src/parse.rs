@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use redis::{Value, RedisResult, FromRedisValue, from_redis_value};
 
-use crate::helpers::create_rediserror;
+use crate::{helpers::create_rediserror, from_graph_value};
 
 /// Official enum from redis-graph https://github.com/RedisGraph/RedisGraph/blob/master/src/resultset/formatters/resultset_formatter.h#L20-L33
-mod Types {
+mod types {
     pub const VALUE_UNKNOWN: i64 = 0;
 	pub const VALUE_NULL: i64 = 1;
 	pub const VALUE_STRING: i64 = 2;
@@ -21,14 +23,65 @@ mod Types {
 #[derive(Clone, Debug, PartialEq)]
 pub enum GraphValue {
     Scalar(Value),
+    Map(HashMap<String, GraphValue>),
+    Point(GeoPoint),
+    Path(Value),
     Node(Value),
     Array(Vec<GraphValue>),
     Integer(i64),
     Double(f64),
     String(String),
     Boolean(bool),
-    Null,
     Relation(Value),
+    Null,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeoPoint {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+/// Node Type
+#[derive(Debug, Clone)]
+pub struct Node {
+    /// Redisgraph internal node id
+    pub id: i64,
+    /// Ids of the nodes labels that can be mapped to db.labels()
+    pub label_ids: Vec<i64>,
+    /// Map of property ids to property values can be mapped to db.propertyKeys()
+    pub properties: HashMap<i64, GraphValue>
+}
+
+impl Node {
+    pub fn new(id: i64, label_ids: Vec<i64>, properties: HashMap<i64, GraphValue>) -> Self {
+        Self {
+            id,
+            label_ids,
+            properties
+        }
+    }
+}
+
+/// Relationship Type
+#[derive(Debug, Clone)]
+pub struct Relationship {
+    /// Redisgraph internal relationship id
+    pub id: i64,
+    /// Id of the relationships label that can be mapped to db.relationshipTypes()
+    pub label_id: i64,
+    /// Source Node Id
+    pub src: i64,
+    /// Destination Node
+    pub dest: i64,
+    /// Map of property ids to property values can be mapped by db.propertyKeys()
+    pub properties: HashMap<i64, GraphValue>
+}
+
+impl Relationship {
+    pub fn new(id: i64, label_id: i64, src: i64, dest: i64, properties: HashMap<i64, GraphValue>) -> Self {
+        Self { id, label_id, src, dest, properties }
+    }
 }
 
 /*
@@ -127,6 +180,15 @@ impl <T: FromGraphValue>FromGraphValue for Vec<T> {
     }
 }
 
+impl <T: FromGraphValue>FromGraphValue for Option<T> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
+            GraphValue::Null => Ok(None),
+            val => from_graph_value(val)
+        }
+    }
+}
+
 impl FromGraphValue for GraphValue {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         Ok(value)
@@ -185,29 +247,86 @@ from_graph_value_for_tuple! { T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12,
 
 impl FromRedisValue for GraphValue {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
-        use Types::*;
+        
         match v {
-            Value::Bulk(data) if data.len() == 2 => match data[0] {
-                Value::Int(VALUE_NODE) => Ok(GraphValue::Node(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_EDGE) => Ok(GraphValue::Relation(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_NULL) => Ok(GraphValue::Null),
-                Value::Int(VALUE_DOUBLE) => Ok(GraphValue::Double(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_INTEGER) => Ok(GraphValue::Integer(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_ARRAY) => Ok(GraphValue::Array(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_STRING) => Ok(GraphValue::String(from_redis_value(&data[1])?)),
-                Value::Int(VALUE_BOOLEAN) => Ok(GraphValue::Boolean({
-                    match from_redis_value::<String>(&data[1])?.as_str() {
-                        "true" => true,
-                        "false" => false,
-                        _ => return Err(create_rediserror(&format!("Cant convert {:?} to bool", &data[1])))
-                    }
-                })),
-                _ => Ok(GraphValue::Scalar(data[1].to_owned())),
-            }
+            Value::Bulk(data) if data.len() == 2 => match &data[0] {
+                Value::Int(type_) => convert_to_graphvalue(*type_, &data[1]),
+                value => Err(create_rediserror(
+                    &format!("Couldnt convert {:?} to GraphValue", value)
+                ))
+            },
             value => Err(create_rediserror(
                 &format!("Couldnt convert {:?} to GraphValue", value)
             ))
         }
+    }
+}
+
+impl FromRedisValue for Node {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        match v {
+            Value::Bulk(ref values) if values.len() == 3 => Ok(
+                Node::new(
+                    from_redis_value(&values[0])?,
+                    from_redis_value(&values[1])?,
+                    parse_properties(&values[2])?
+                )
+            ),
+            val => Err(create_rediserror(
+                &format!("Couldnt convert {:?} to Node", val)
+            ))
+        }
+    }
+}
+
+impl FromRedisValue for Relationship {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        match v {
+            Value::Bulk(ref values) if values.len() == 5 => Ok(
+                Relationship::new(
+                    from_redis_value(&values[0])?,
+                    from_redis_value(&values[1])?,
+                    from_redis_value(&values[2])?,
+                    from_redis_value(&values[3])?,
+                    parse_properties(&values[4])?
+                )
+            ),
+            val => Err(create_rediserror(
+                &format!("Couldnt convert {:?} to Relationship", val)
+            ))
+        }
+    }
+}
+
+fn parse_properties(value: &Value) -> RedisResult<HashMap<i64, GraphValue>> {
+    let properties: Vec<(i64, i64, Value)> = from_redis_value(value)?;
+    properties.into_iter()
+        .map(|(property_id, type_, value)| match convert_to_graphvalue(type_, &value) {
+            Ok(gvalue) => Ok((property_id, gvalue)),
+            Err(err) => Err(err)
+        })
+        .collect()
+}
+
+fn convert_to_graphvalue(type_: i64, val: &Value) -> RedisResult<GraphValue> {
+    use types::*;
+    match type_ {
+        VALUE_NODE => Ok(GraphValue::Node(from_redis_value(val)?)),
+        VALUE_EDGE => Ok(GraphValue::Relation(from_redis_value(val)?)),
+        VALUE_NULL => Ok(GraphValue::Null),
+        VALUE_DOUBLE => Ok(GraphValue::Double(from_redis_value(val)?)),
+        VALUE_INTEGER => Ok(GraphValue::Integer(from_redis_value(val)?)),
+        VALUE_ARRAY => Ok(GraphValue::Array(from_redis_value(val)?)),
+        VALUE_STRING => Ok(GraphValue::String(from_redis_value(val)?)),
+        VALUE_BOOLEAN => Ok(GraphValue::Boolean({
+            // The FromRedisValue impl for bool does not support a bool (for good reason) does not impl this conversion
+            match from_redis_value::<String>(val)?.as_str() {
+                "true" => true,
+                "false" => false,
+                _ => return Err(create_rediserror(&format!("Cant convert {:?} to bool", val)))
+            }
+        })),
+        _ => Ok(GraphValue::Scalar(val.to_owned())), // TODO: improve
     }
 }
 
