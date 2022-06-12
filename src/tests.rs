@@ -1,6 +1,6 @@
 use paste::paste;
 use indexmap::indexmap;
-use crate::{query, GraphQuery, GraphCommands, GraphValue, Node, PropertyAccess};
+use crate::{query, GraphQuery, GraphCommands, GraphValue, Node, PropertyAccess, GraphMap, GeoPoint};
 
 #[test]
 fn test_query_macro() {
@@ -129,16 +129,18 @@ test_parse!{boolean,
 
 
 test_parse!{vec,
-    query!("Return [1, 2, 3, 4]"),
+    query!("Return [1, 2, 3, 4], [5, 6]"),
     {
-        Vec<i32> => vec![1, 2, 3, 4]
+        Vec<i32> => vec![1, 2, 3, 4],
+        Option<Vec<i32>> => Some(vec![5, 6])
     }
 }
 
 test_parse!{null,
-    query!("Return null"),
+    query!("Return null, null as b"),
     {
-        GraphValue => GraphValue::Null
+        GraphValue => GraphValue::Null,
+        Option<i32> => None
     }
 }
 
@@ -155,3 +157,26 @@ test_parse!{string,
     }
 }
 
+test_parse!{map,
+    query!("Return {a: 5, b: 4.5, c: [1,2]}"),
+    {
+        GraphMap => GraphMap([
+            ("a".to_string(), GraphValue::Integer(5)),
+            ("b".to_string(), GraphValue::Double(4.5)),
+            ("c".to_string(), GraphValue::Array(vec![
+                GraphValue::Integer(1),
+                GraphValue::Integer(2)
+            ]))
+        ].into_iter().collect())
+    }
+}
+
+test_parse!{point,
+    query!("Return point({latitude: 32.070794860, longitude: 34.820751118})"),
+    {
+        GeoPoint => GeoPoint {
+            latitude: 32.070794860,
+            longitude: 34.820751118
+        }
+    }
+}

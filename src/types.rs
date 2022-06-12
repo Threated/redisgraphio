@@ -37,7 +37,7 @@ impl<T: FromGraphValue> GraphResponse<T> {
                         Ok(GraphResponse {
                             header: <GraphResponse>::parse_header(header),
                             data: temp.into_iter().map(|arr|
-                                from_graph_value(GraphValue::Array(arr))
+                                from_graph_value(&GraphValue::Array(arr))
                               ).collect::<RedisResult<_>>()?,
                             statistics
                         })
