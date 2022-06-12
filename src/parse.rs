@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::{Deref, DerefMut, Index}};
+use std::{collections::HashMap, ops::{Deref, DerefMut}};
 use indexmap::IndexMap;
 use redis::{Value, RedisResult, FromRedisValue, from_redis_value};
 
@@ -26,14 +26,14 @@ pub enum GraphValue {
     Unknown(Value),
     Map(GraphMap),
     Point(GeoPoint),
-    Path(Value),
-    Node(Value),
+    Path(GraphMap),
+    Node(Node),
     Array(Vec<GraphValue>),
     Integer(i64),
     Double(f64),
     String(String),
     Boolean(bool),
-    Relation(Value),
+    Relation(Relationship),
     Null,
 }
 
@@ -69,7 +69,7 @@ impl DerefMut for GraphMap {
 }
 
 /// Node Type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     /// Redisgraph internal node id
     pub id: i64,
@@ -90,7 +90,7 @@ impl Node {
 }
 
 /// Relationship Type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Relationship {
     /// Redisgraph internal relationship id
     pub id: i64,
@@ -154,6 +154,22 @@ impl PropertyAccess for Relationship {
 
     fn into_property_values<T: FromGraphValue>(self) -> RedisResult<T> {
         FromGraphValue::from_graph_value(&GraphValue::Array(self.properties.into_values().collect()))
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct GraphPath {
+    pub nodes: Vec<Node>,
+    pub relationships: Vec<Relationship>
+}
+
+impl FromRedisValue for GraphPath {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        let (nodes, relationships): (Vec<Node>, Vec<Relationship>) = from_redis_value(v)?;
+        Ok(GraphPath {
+            nodes,
+            relationships
+        })
     }
 }
 
@@ -397,6 +413,7 @@ fn convert_to_graphvalue(type_: i64, val: &Value) -> RedisResult<GraphValue> {
     match type_ {
         VALUE_NODE => Ok(GraphValue::Node(from_redis_value(val)?)),
         VALUE_EDGE => Ok(GraphValue::Relation(from_redis_value(val)?)),
+        VALUE_PATH => Ok(GraphValue::Map(from_redis_value(val)?)),
         VALUE_MAP => Ok(GraphValue::Map(from_redis_value(val)?)),
         VALUE_POINT => Ok(GraphValue::Point(from_redis_value(val)?)),
         VALUE_NULL => Ok(GraphValue::Null),

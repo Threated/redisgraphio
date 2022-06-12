@@ -1,6 +1,6 @@
 use paste::paste;
 use indexmap::indexmap;
-use crate::{query, GraphQuery, GraphCommands, GraphValue, Node, PropertyAccess, GraphMap, GeoPoint};
+use crate::{query, GraphQuery, GraphCommands, GraphValue, Node, GraphMap, GeoPoint};
 
 #[test]
 fn test_query_macro() {
