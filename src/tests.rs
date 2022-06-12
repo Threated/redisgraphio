@@ -1,43 +1,48 @@
-use paste::paste;
+use crate::{
+    query, GeoPoint, GraphCommands, GraphMap, GraphPath, GraphQuery, GraphValue, Node,
+    PropertyAccess,
+};
 use indexmap::indexmap;
-use crate::{query, GraphQuery, GraphCommands, GraphValue, Node, GraphMap, GeoPoint};
+use paste::paste;
 
 #[test]
 fn test_query_macro() {
     assert_eq!(
-        query!("Return 1"), 
+        query!("Return 1"),
         GraphQuery {
-            query: "Return 1", read_only: false, params: vec![]
+            query: "Return 1",
+            read_only: false,
+            params: vec![]
         }
     );
     assert_eq!(
-        query!("Return 1", true), 
+        query!("Return 1", true),
         GraphQuery {
-            query: "Return 1", read_only: true, params: vec![]
+            query: "Return 1",
+            read_only: true,
+            params: vec![]
         }
     );
     assert_eq!(
         query!("Return 1", {
             "a" => 4,
             "b" => "test"
-        }), 
+        }),
         GraphQuery {
-            query: "Return 1", read_only: false, params: vec![
-                ("a", 4.into()),
-                ("b", "test".into())
-            ]
+            query: "Return 1",
+            read_only: false,
+            params: vec![("a", 4.into()), ("b", "test".into())]
         }
     );
     assert_eq!(
         query!("Return 1", {
             "a" => 4.5,
             "b" => "test"
-        }, true), 
+        }, true),
         GraphQuery {
-            query: "Return 1", read_only: true, params: vec![
-                ("a", 4.5.into()),
-                ("b", "test".into())
-            ]
+            query: "Return 1",
+            read_only: true,
+            params: vec![("a", 4.5.into()), ("b", "test".into())]
         }
     );
 }
@@ -95,7 +100,7 @@ macro_rules! test_parse {
     };
 }
 
-test_parse!{ints,
+test_parse! {ints,
     query!("Return 1, 2, 3, 4, 5, 6, 7, 18446744073709551617"), // 2**64+1 == 18446744073709551617
     {
         u8 => 1,
@@ -109,7 +114,7 @@ test_parse!{ints,
     }
 }
 
-test_parse!{double,
+test_parse! {double,
     query!("Return 1.0, 3.3, 4.67"),
     {
         f32 => 1.0,
@@ -118,7 +123,7 @@ test_parse!{double,
     }
 }
 
-test_parse!{boolean,
+test_parse! {boolean,
     query!("Return 1.0 = 1.0, 0=1, true"),
     {
         bool => true,
@@ -127,8 +132,7 @@ test_parse!{boolean,
     }
 }
 
-
-test_parse!{vec,
+test_parse! {vec,
     query!("Return [1, 2, 3, 4], [5, 6]"),
     {
         Vec<i32> => vec![1, 2, 3, 4],
@@ -136,7 +140,7 @@ test_parse!{vec,
     }
 }
 
-test_parse!{null,
+test_parse! {null,
     query!("Return null, null as b"),
     {
         GraphValue => GraphValue::Null,
@@ -144,7 +148,7 @@ test_parse!{null,
     }
 }
 
-test_parse!{string,
+test_parse! {string,
     query!(r#"Return "test", 'test', $other, $a"#, {
         "other" => r#"a\"b\'c'd"e"#,
         "a" => r#"\" Return 1337//"#
@@ -157,7 +161,7 @@ test_parse!{string,
     }
 }
 
-test_parse!{map,
+test_parse! {map,
     query!("Return {a: 5, b: 4.5, c: [1,2]}"),
     {
         GraphMap => GraphMap([
@@ -171,7 +175,7 @@ test_parse!{map,
     }
 }
 
-test_parse!{point,
+test_parse! {point,
     query!("Return point({latitude: 32.070794860, longitude: 34.820751118})"),
     {
         GeoPoint => GeoPoint {
@@ -179,4 +183,33 @@ test_parse!{point,
             longitude: 34.820751118
         }
     }
+}
+
+#[test]
+fn test_parse_graphtypes() {
+    let con = &mut sync_con();
+    con.graph_query::<_, ()>("test", query!("Create (:User {a: 1})-[:follows]->(:User)"))
+        .unwrap();
+    let paths: Vec<(GraphPath,)> = con
+        .graph_query(
+            "test",
+            query!("Match p=(a:User {a: 1})-[:follows {b:3}]->(b:User) Return p"),
+        )
+        .unwrap()
+        .data;
+    for (GraphPath {
+        nodes,
+        relationships,
+    },) in paths.into_iter()
+    {
+        assert_eq!(nodes[0].get_property_by_index::<i32>(0).unwrap(), 1);
+        assert_eq!(nodes[0].property_values::<(i32,)>().unwrap(), (1,));
+        assert_eq!(relationships[0].get_property_by_index::<i32>(0).unwrap(), 3);
+    }
+
+    con.graph_query::<_, ()>(
+        "test",
+        query!("Match (a:User {a: 1})-[:follows]->(b:User) Detach Delete a, b"),
+    )
+    .unwrap();
 }
