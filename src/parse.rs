@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-
+use std::{collections::HashMap, ops::Index};
+use indexmap::IndexMap;
 use redis::{Value, RedisResult, FromRedisValue, from_redis_value};
 
 use crate::{helpers::create_rediserror, from_graph_value};
+
 
 /// Official enum from redis-graph https://github.com/RedisGraph/RedisGraph/blob/master/src/resultset/formatters/resultset_formatter.h#L20-L33
 mod types {
@@ -50,11 +51,11 @@ pub struct Node {
     /// Ids of the nodes labels that can be mapped to db.labels()
     pub label_ids: Vec<i64>,
     /// Map of property ids to property values can be mapped to db.propertyKeys()
-    pub properties: HashMap<i64, GraphValue>
+    pub properties: IndexMap<i64, GraphValue>
 }
 
 impl Node {
-    pub fn new(id: i64, label_ids: Vec<i64>, properties: HashMap<i64, GraphValue>) -> Self {
+    pub fn new(id: i64, label_ids: Vec<i64>, properties: IndexMap<i64, GraphValue>) -> Self {
         Self {
             id,
             label_ids,
@@ -75,46 +76,54 @@ pub struct Relationship {
     /// Destination Node
     pub dest: i64,
     /// Map of property ids to property values can be mapped by db.propertyKeys()
-    pub properties: HashMap<i64, GraphValue>
+    pub properties: IndexMap<i64, GraphValue>
 }
 
 impl Relationship {
-    pub fn new(id: i64, label_id: i64, src: i64, dest: i64, properties: HashMap<i64, GraphValue>) -> Self {
+    pub fn new(id: i64, label_id: i64, src: i64, dest: i64, properties: IndexMap<i64, GraphValue>) -> Self {
         Self { id, label_id, src, dest, properties }
     }
 }
 
-/*
-bulk(bulk(bulk(int(1), string-data('"4"')), bulk(int(1), string-data('"7"'))), bulk(bulk(bulk(int(3), int(4)), bulk(int(3), int(7)))), bulk(string-data('"Cached execution: 1"')
-bulk(
-    # Header
-    bulk(
-        bulk(
-            int(1), string-data('"4"')
-        ),
-        bulk(
-            int(1), string-data('"7"')
-        )
-    ),
-    # Body
-    bulk(
-        # Matches
-        bulk(
-            # Returns
-            bulk(
-                int(3), int(4)
-            ), 
-            bulk(
-                int(3), int(7)
-            )
-        )
-    ),
-    # Metadata
-    bulk(
-        string-data('"Cached execution: 1"'),
-        string-data('"Query internal execution time: 0.109212 milliseconds"')
-    ))
-*/ 
+pub trait PropertyAccess {
+    fn properties(&self) -> &IndexMap<i64, GraphValue>;
+
+    /// get property by property label id
+    fn get(&self, id: i64) -> Option<&GraphValue> {
+        self.properties().get(&id)
+    }
+
+    /// get property values in the order they were defined
+    fn property_values(&self) -> Vec<&GraphValue> {
+        self.properties().values().collect()
+    }
+
+    /// Same as `property_values()` but consumes the object taking ownership of the `Graphvalue`s
+    fn into_property_values(self) -> Vec<GraphValue>;
+}
+
+impl PropertyAccess for Node {
+    #[inline(always)]
+    fn properties(&self) -> &IndexMap<i64, GraphValue> {
+        &self.properties
+    }
+
+    fn into_property_values(self) -> Vec<GraphValue> {
+        self.properties.into_values().collect()
+    }
+}
+
+impl PropertyAccess for Relationship {
+    #[inline(always)]
+    fn properties(&self) -> &IndexMap<i64, GraphValue> {
+        &self.properties
+    }
+
+    fn into_property_values(self) -> Vec<GraphValue> {
+        self.properties.into_values().collect()
+    }
+}
+
 
 pub trait FromGraphValue: Sized {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self>;
@@ -298,7 +307,7 @@ impl FromRedisValue for Relationship {
     }
 }
 
-fn parse_properties(value: &Value) -> RedisResult<HashMap<i64, GraphValue>> {
+fn parse_properties(value: &Value) -> RedisResult<IndexMap<i64, GraphValue>> {
     let properties: Vec<(i64, i64, Value)> = from_redis_value(value)?;
     properties.into_iter()
         .map(|(property_id, type_, value)| match convert_to_graphvalue(type_, &value) {
@@ -319,7 +328,7 @@ fn convert_to_graphvalue(type_: i64, val: &Value) -> RedisResult<GraphValue> {
         VALUE_ARRAY => Ok(GraphValue::Array(from_redis_value(val)?)),
         VALUE_STRING => Ok(GraphValue::String(from_redis_value(val)?)),
         VALUE_BOOLEAN => Ok(GraphValue::Boolean({
-            // The FromRedisValue impl for bool does not support a bool (for good reason) does not impl this conversion
+            // The FromRedisValue impl for bool does not support this conversion (for good reason)
             match from_redis_value::<String>(val)?.as_str() {
                 "true" => true,
                 "false" => false,
