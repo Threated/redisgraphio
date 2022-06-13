@@ -188,7 +188,7 @@ test_parse! {point,
 #[test]
 fn test_parse_graphtypes() {
     let con = &mut sync_con();
-    con.graph_query::<_, ()>("test", query!("Create (:User {a: 1})-[:follows]->(:User)"))
+    con.graph_query_void("test", query!("Create (:User {a: 1})-[:follows]->(:User)"))
         .unwrap();
     let paths: Vec<(GraphPath,)> = con
         .graph_query(
@@ -207,7 +207,7 @@ fn test_parse_graphtypes() {
         assert_eq!(relationships[0].get_property_by_index::<i32>(0).unwrap(), 3);
     }
 
-    con.graph_query::<_, ()>(
+    con.graph_query_void(
         "test",
         query!("Match (a:User {a: 1})-[:follows]->(b:User) Detach Delete a, b"),
     )

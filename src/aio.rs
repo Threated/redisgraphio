@@ -5,6 +5,7 @@ use crate::{types::GraphQuery, FromGraphValue, GraphResponse, query};
 
 
 pub trait AsyncGraphCommands: ConnectionLike + Send + Sized {
+    ///
     fn graph_query<'a, Q, RT>(
         &'a mut self,
         graph: &'a str,

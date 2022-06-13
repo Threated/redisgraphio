@@ -14,13 +14,13 @@ macro_rules! apply_macro {
 
 pub(crate) use apply_macro;
 
-/// So you dont have to write FromGraphValue::from_graph_value(value) every time
+/// Shorthand for FromGraphValue::from_graph_value(value)
 #[inline(always)]
 pub fn from_graph_value<T: FromGraphValue>(value: GraphValue) -> RedisResult<T> {
     FromGraphValue::from_graph_value(value)
 }
 
-/// Helper for creating Rediserror
+/// Helper for creating a Rediserror
 pub fn create_rediserror(desc: &str) -> RedisError {
     (
         ErrorKind::TypeError,
@@ -29,6 +29,26 @@ pub fn create_rediserror(desc: &str) -> RedisError {
     ).into()
 }
 
+/// Macro for creating a GraphQuery
+/// ## Diffrent usecases
+/// ```
+/// query!("query string"); // Normal query
+/// query!("query string", true) // Normal read only query
+/// query!(
+///     "query string $param",
+///     {
+///         'param' => 5 // or "Some string" or 4.8 everything is converted with Parameter::from
+///     }
+/// ) // Query with parameters and read only
+/// query!(
+///     "query string $param $name",
+///     {
+///         'param' => 5,
+///         'name' => 'username'
+///     },
+///     true
+/// ) // Query with parameters and read only
+/// ```
 #[macro_export]
 macro_rules! query {
     ( $s:expr $(, $ro:literal)?) => {{

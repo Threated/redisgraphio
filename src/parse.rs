@@ -10,7 +10,7 @@ use crate::{
     helpers::{create_rediserror, apply_macro}
 };
 
-/// Official enum from redis-graph https://github.com/RedisGraph/RedisGraph/blob/master/src/resultset/formatters/resultset_formatter.h#L20-L33
+/// [Official enum](https://github.com/RedisGraph/RedisGraph/blob/master/src/resultset/formatters/resultset_formatter.h#L20-L33) from redis-graph 
 mod types {
     pub const VALUE_UNKNOWN: i64 = 0;
     pub const VALUE_NULL: i64 = 1;
@@ -26,6 +26,7 @@ mod types {
     pub const VALUE_POINT: i64 = 11;
 }
 
+/// An enum containing every possible type that can be returned by redisgraph
 #[derive(Clone, Debug, PartialEq)]
 pub enum GraphValue {
     Unknown(Value),
@@ -42,12 +43,14 @@ pub enum GraphValue {
     Null,
 }
 
+/// The type returned by the point method in cypher
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeoPoint {
     pub latitude: f32,
     pub longitude: f32,
 }
 
+/// Map typed as returned by RETURN {a: 1}
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphMap(pub HashMap<String, GraphValue>);
 
@@ -138,6 +141,8 @@ pub trait PropertyAccess {
         }
     }
 
+    /// gets a property by its order of definition
+    /// Note when relying on property order make sure every CREATE has the same order of these properties
     fn get_property_by_index<T: FromGraphValue>(&self, idx: usize) -> RedisResult<T> {
         from_graph_value(self.properties()[idx].clone())
     }
@@ -179,12 +184,38 @@ impl PropertyAccess for Relationship {
     }
 }
 
+/// Type for graph paths as returned by MATCH p=(\:A)-[\:B]->(\:C) RETURN p
 #[derive(Debug, PartialEq, Clone)]
 pub struct GraphPath {
     pub nodes: Vec<Node>,
     pub relationships: Vec<Relationship>,
 }
 
+/// ## Overview
+/// Trait for converting the response to an arbitray type which implents it
+/// This is similar to the FromRedisValue trait from redis
+/// 
+/// ## Example
+/// ```no_run
+/// struct MyType {
+///     a: i32
+///     b: Vec<String>
+/// }
+/// 
+/// impl FromGraphValue for MyType {
+///     fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+///         let (a, b): (i32, Vec<String>) = from_graph_value(value)?;
+///         // You dont even need the type annotations above as they are inferred in this case
+///         Ok(MyType {
+///             a,
+///             b
+///         })
+///     }
+/// }
+/// // Now you can write code like this
+/// let con = // Connection to redis
+/// let data: Vec<MyType> = con.graph_query("graphname", query!("RETURN 1, ['a', 'b']"))?.data;
+/// ```
 pub trait FromGraphValue: Sized {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self>;
 }
