@@ -1,6 +1,6 @@
 use crate::{
     query, GeoPoint, GraphCommands, GraphMap, GraphPath, GraphQuery, GraphValue,
-    PropertyAccess,
+    PropertyAccess
 };
 
 use paste::paste;
@@ -212,4 +212,12 @@ fn test_parse_graphtypes() {
         query!("Match (a:User {a: 1})-[:follows]->(b:User) Detach Delete a, b"),
     )
     .unwrap();
+}
+
+#[test]
+fn test_mappings() {
+    let con = &mut sync_con();
+    con.labels("test").unwrap();
+    con.relationship_types("test").unwrap();
+    con.property_keys("test").unwrap();
 }
