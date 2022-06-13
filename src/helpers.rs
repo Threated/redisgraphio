@@ -3,6 +3,17 @@ use redis::{RedisResult, ErrorKind, RedisError};
 use crate::{FromGraphValue, GraphValue};
 
 
+/// Helper macro to apply a macro to each following type
+macro_rules! apply_macro {
+    ($m:tt, $($x:ty),+) => {
+        $(
+            $m!($x);
+        )*
+    };
+}
+
+pub(crate) use apply_macro;
+
 /// So you dont have to write FromGraphValue::from_graph_value(value) every time
 #[inline(always)]
 pub fn from_graph_value<T: FromGraphValue>(value: GraphValue) -> RedisResult<T> {
@@ -38,7 +49,7 @@ macro_rules! query {
         )?
         crate::types::GraphQuery {
             query: $s, read_only, params: vec![$(
-                ($k, crate::parse::Parameter::from($v)),
+                ($k, crate::types::Parameter::from($v)),
             )*]
         }
     }}

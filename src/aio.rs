@@ -1,4 +1,4 @@
-use redis::{aio::ConnectionLike, RedisFuture, cmd, RedisResult};
+use redis::{aio::ConnectionLike, RedisFuture, cmd};
 
 use crate::{types::GraphQuery, FromGraphValue, GraphResponse, query};
 

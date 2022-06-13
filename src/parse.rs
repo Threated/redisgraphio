@@ -5,7 +5,10 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::{from_graph_value, helpers::create_rediserror};
+use crate::{
+    from_graph_value,
+    helpers::{create_rediserror, apply_macro}
+};
 
 /// Official enum from redis-graph https://github.com/RedisGraph/RedisGraph/blob/master/src/resultset/formatters/resultset_formatter.h#L20-L33
 mod types {
@@ -182,28 +185,10 @@ pub struct GraphPath {
     pub relationships: Vec<Relationship>,
 }
 
-impl FromRedisValue for GraphPath {
-    fn from_redis_value(v: &Value) -> RedisResult<Self> {
-        let (nodes, relationships): (GraphValue, GraphValue) = from_redis_value(v)?;
-        Ok(GraphPath {
-            nodes: from_graph_value(nodes)?,
-            relationships: from_graph_value(relationships)?,
-        })
-    }
-}
-
 pub trait FromGraphValue: Sized {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self>;
 }
 
-/// Helper macro to apply a macro to each following type
-macro_rules! apply_macro {
-    ($m:tt, $($x:ty),+) => {
-        $(
-            $m!($x);
-        )*
-    };
-}
 
 /// Macro for implementing the FromGraphValue Trait for a int type
 macro_rules! from_graph_value_for_int {
@@ -221,6 +206,7 @@ macro_rules! from_graph_value_for_int {
         }
     };
 }
+
 /// Macro for implementing the FromGraphValue Trait for a float type
 macro_rules! from_graph_value_for_float {
     ( $t:ty ) => {
@@ -319,6 +305,30 @@ impl FromGraphValue for GeoPoint {
     }
 }
 
+impl FromGraphValue for Node {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
+            GraphValue::Node(node) => Ok(node),
+            _ => Err(create_rediserror(&format!(
+                "Cant convert {:?} to Node",
+                value
+            ))),
+        }
+    }
+}
+
+impl FromGraphValue for Relationship {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
+            GraphValue::Relation(rel) => Ok(rel),
+            _ => Err(create_rediserror(&format!(
+                "Cant convert {:?} to Relationship",
+                value
+            ))),
+        }
+    }
+}
+
 impl<T: FromGraphValue> FromGraphValue for Option<T> {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
@@ -405,6 +415,16 @@ impl FromRedisValue for GraphValue {
     }
 }
 
+impl FromRedisValue for GraphPath {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        let (nodes, relationships): (GraphValue, GraphValue) = from_redis_value(v)?;
+        Ok(GraphPath {
+            nodes: from_graph_value(nodes)?,
+            relationships: from_graph_value(relationships)?,
+        })
+    }
+}
+
 impl FromRedisValue for GeoPoint {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
         let (latitude, longitude): (f32, f32) = from_redis_value(v)?;
@@ -446,29 +466,6 @@ impl FromRedisValue for Node {
     }
 }
 
-impl FromGraphValue for Node {
-    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
-        match value {
-            GraphValue::Node(node) => Ok(node),
-            _ => Err(create_rediserror(&format!(
-                "Cant convert {:?} to Node",
-                value
-            ))),
-        }
-    }
-}
-
-impl FromGraphValue for Relationship {
-    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
-        match value {
-            GraphValue::Relation(rel) => Ok(rel),
-            _ => Err(create_rediserror(&format!(
-                "Cant convert {:?} to Relationship",
-                value
-            ))),
-        }
-    }
-}
 
 impl FromRedisValue for Relationship {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
@@ -533,54 +530,5 @@ fn convert_to_graphvalue(type_: i64, val: &Value) -> RedisResult<GraphValue> {
             }
         })),
         VALUE_UNKNOWN | _ => Ok(GraphValue::Unknown(val.to_owned())),
-    }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub enum Parameter {
-    String(String),
-    Int(i64),
-    Double(f64),
-}
-
-/// Macro for implementing the From Trait for a numeric type
-macro_rules! parameter_from_int {
-    ( $t:ty ) => {
-        impl From<$t> for Parameter {
-            fn from(id: $t) -> Self {
-                Parameter::Int(i64::from(id))
-            }
-        }
-    };
-}
-
-macro_rules! parameter_from_double {
-    ( $t:ty ) => {
-        impl From<$t> for Parameter {
-            fn from(id: $t) -> Self {
-                Parameter::Double(f64::from(id))
-            }
-        }
-    };
-}
-
-apply_macro!(parameter_from_int, i8, i16, i32, i64, u8, u16, u32);
-apply_macro!(parameter_from_double, f32, f64);
-
-impl<'a> From<&'a str> for Parameter {
-    fn from(string: &'a str) -> Self {
-        Parameter::String(string.to_string())
-    }
-}
-
-impl From<String> for Parameter {
-    fn from(string: String) -> Self {
-        Parameter::String(string)
-    }
-}
-
-impl From<&String> for Parameter {
-    fn from(string: &String) -> Self {
-        Parameter::String(string.to_string())
     }
 }

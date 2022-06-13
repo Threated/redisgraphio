@@ -1,6 +1,6 @@
 use redis::{FromRedisValue, Value, RedisResult, from_redis_value};
 
-use crate::{GraphValue, helpers::create_rediserror, FromGraphValue, from_graph_value, Parameter};
+use crate::{GraphValue, helpers::{create_rediserror, apply_macro}, FromGraphValue, from_graph_value};
 
 #[derive(Debug)]
 pub struct GraphResponse<T = GraphValue> where T: FromGraphValue {
@@ -106,5 +106,54 @@ impl GraphQuery {
 impl From<&'static str> for GraphQuery {
     fn from(query: &'static str) -> Self {
         GraphQuery { query, params: vec![], read_only: false}
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum Parameter {
+    String(String),
+    Int(i64),
+    Double(f64),
+}
+
+/// Macro for implementing the From Trait for a numeric type
+macro_rules! parameter_from_int {
+    ( $t:ty ) => {
+        impl From<$t> for Parameter {
+            fn from(id: $t) -> Self {
+                Parameter::Int(i64::from(id))
+            }
+        }
+    };
+}
+
+macro_rules! parameter_from_double {
+    ( $t:ty ) => {
+        impl From<$t> for Parameter {
+            fn from(id: $t) -> Self {
+                Parameter::Double(f64::from(id))
+            }
+        }
+    };
+}
+
+apply_macro!(parameter_from_int, i8, i16, i32, i64, u8, u16, u32);
+apply_macro!(parameter_from_double, f32, f64);
+
+impl<'a> From<&'a str> for Parameter {
+    fn from(string: &'a str) -> Self {
+        Parameter::String(string.to_string())
+    }
+}
+
+impl From<String> for Parameter {
+    fn from(string: String) -> Self {
+        Parameter::String(string)
+    }
+}
+
+impl From<&String> for Parameter {
+    fn from(string: &String) -> Self {
+        Parameter::String(string.to_string())
     }
 }

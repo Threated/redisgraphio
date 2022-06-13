@@ -8,7 +8,7 @@ mod tests;
 pub use crate::types::*;
 pub use crate::sync::GraphCommands;
 pub use crate::parse::*;
-pub use crate::helpers::from_graph_value;
+pub use crate::helpers::{from_graph_value, create_rediserror};
 
 #[cfg(any(feature = "tokio-comp", feature = "async-std-comp"))]
 mod aio;
