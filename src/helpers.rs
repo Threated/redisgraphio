@@ -5,7 +5,7 @@ use crate::{FromGraphValue, GraphValue};
 
 /// So you dont have to write FromGraphValue::from_graph_value(value) every time
 #[inline(always)]
-pub fn from_graph_value<T: FromGraphValue>(value: &GraphValue) -> RedisResult<T> {
+pub fn from_graph_value<T: FromGraphValue>(value: GraphValue) -> RedisResult<T> {
     FromGraphValue::from_graph_value(value)
 }
 

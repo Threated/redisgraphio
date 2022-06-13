@@ -1,8 +1,8 @@
 use crate::{
-    query, GeoPoint, GraphCommands, GraphMap, GraphPath, GraphQuery, GraphValue, Node,
+    query, GeoPoint, GraphCommands, GraphMap, GraphPath, GraphQuery, GraphValue,
     PropertyAccess,
 };
-use indexmap::indexmap;
+
 use paste::paste;
 
 #[test]

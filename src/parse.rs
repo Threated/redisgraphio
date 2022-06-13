@@ -130,18 +130,18 @@ pub trait PropertyAccess {
     /// get property by property label id
     fn get_property_by_label_id<T: FromGraphValue>(&self, label_id: i64) -> RedisResult<Option<T>> {
         match self.properties().get(&label_id) {
-            Some(val) => from_graph_value(val),
+            Some(val) => from_graph_value(val.clone()),
             None => Ok(None),
         }
     }
 
     fn get_property_by_index<T: FromGraphValue>(&self, idx: usize) -> RedisResult<T> {
-        from_graph_value(&self.properties()[idx])
+        from_graph_value(self.properties()[idx].clone())
     }
 
     /// get property values in the order they were defined
     fn property_values<T: FromGraphValue>(&self) -> RedisResult<T> {
-        from_graph_value(&GraphValue::Array(
+        from_graph_value(GraphValue::Array(
             self.properties().values().cloned().collect(),
         ))
     }
@@ -157,7 +157,7 @@ impl PropertyAccess for Node {
     }
 
     fn into_property_values<T: FromGraphValue>(self) -> RedisResult<T> {
-        FromGraphValue::from_graph_value(&GraphValue::Array(
+        FromGraphValue::from_graph_value(GraphValue::Array(
             self.properties.into_values().collect(),
         ))
     }
@@ -170,7 +170,7 @@ impl PropertyAccess for Relationship {
     }
 
     fn into_property_values<T: FromGraphValue>(self) -> RedisResult<T> {
-        FromGraphValue::from_graph_value(&GraphValue::Array(
+        FromGraphValue::from_graph_value(GraphValue::Array(
             self.properties.into_values().collect(),
         ))
     }
@@ -186,14 +186,14 @@ impl FromRedisValue for GraphPath {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
         let (nodes, relationships): (GraphValue, GraphValue) = from_redis_value(v)?;
         Ok(GraphPath {
-            nodes: from_graph_value(&nodes)?,
-            relationships: from_graph_value(&relationships)?,
+            nodes: from_graph_value(nodes)?,
+            relationships: from_graph_value(relationships)?,
         })
     }
 }
 
 pub trait FromGraphValue: Sized {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self>;
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self>;
 }
 
 /// Helper macro to apply a macro to each following type
@@ -209,9 +209,9 @@ macro_rules! apply_macro {
 macro_rules! from_graph_value_for_int {
     ( $t:ty ) => {
         impl FromGraphValue for $t {
-            fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+            fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
                 match value {
-                    GraphValue::Integer(val) => Ok(*val as $t),
+                    GraphValue::Integer(val) => Ok(val as $t),
                     _ => Err(create_rediserror(&format!(
                         concat!("Cant convert {:?} to ", stringify!($t)),
                         value
@@ -225,9 +225,9 @@ macro_rules! from_graph_value_for_int {
 macro_rules! from_graph_value_for_float {
     ( $t:ty ) => {
         impl FromGraphValue for $t {
-            fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+            fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
                 match value {
-                    GraphValue::Double(val) => Ok(*val as $t),
+                    GraphValue::Double(val) => Ok(val as $t),
                     _ => Err(create_rediserror(&format!(
                         concat!("Cant convert {:?} to ", stringify!($t)),
                         value
@@ -251,9 +251,9 @@ apply_macro!(
 apply_macro!(from_graph_value_for_float, f32, f64);
 
 impl FromGraphValue for bool {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
-            GraphValue::Boolean(val) => Ok(*val),
+            GraphValue::Boolean(val) => Ok(val),
             _ => Err(create_rediserror(&format!(
                 "Cant convert {:?} to bool",
                 value
@@ -263,13 +263,13 @@ impl FromGraphValue for bool {
 }
 
 impl FromGraphValue for () {
-    fn from_graph_value(_: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(_: GraphValue) -> RedisResult<Self> {
         Ok(())
     }
 }
 
 impl<T: FromGraphValue> FromGraphValue for Vec<T> {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
             GraphValue::Array(val) => Ok(val
                 .into_iter()
@@ -284,9 +284,9 @@ impl<T: FromGraphValue> FromGraphValue for Vec<T> {
 }
 
 impl FromGraphValue for GraphMap {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
-            GraphValue::Map(map) => Ok(map.clone()),
+            GraphValue::Map(map) => Ok(map),
             _ => Err(create_rediserror(&format!(
                 "Cant convert {:?} to GraphMap",
                 value
@@ -296,9 +296,9 @@ impl FromGraphValue for GraphMap {
 }
 
 impl FromGraphValue for GraphPath {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
-            GraphValue::Path(path) => Ok(path.clone()),
+            GraphValue::Path(path) => Ok(path),
             _ => Err(create_rediserror(&format!(
                 "Cant convert {:?} to GraphPath",
                 value
@@ -308,9 +308,9 @@ impl FromGraphValue for GraphPath {
 }
 
 impl FromGraphValue for GeoPoint {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
-            GraphValue::Point(point) => Ok(point.clone()),
+            GraphValue::Point(point) => Ok(point),
             _ => Err(create_rediserror(&format!(
                 "Cant convert {:?} to GeoPoint",
                 value
@@ -320,7 +320,7 @@ impl FromGraphValue for GeoPoint {
 }
 
 impl<T: FromGraphValue> FromGraphValue for Option<T> {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
             GraphValue::Null => Ok(None),
             val => Ok(Some(from_graph_value(val)?)),
@@ -329,13 +329,13 @@ impl<T: FromGraphValue> FromGraphValue for Option<T> {
 }
 
 impl FromGraphValue for GraphValue {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
-        Ok(value.clone())
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        Ok(value)
     }
 }
 
 impl FromGraphValue for String {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
             GraphValue::String(s) => Ok(s.to_string()),
             _ => Err(create_rediserror(&format!(
@@ -355,8 +355,8 @@ macro_rules! from_graph_value_for_tuple {
             // we have local variables named T1 as dummies and those
             // variables are unused.
             #[allow(non_snake_case, unused_variables)]
-            fn from_graph_value(v: &GraphValue) -> RedisResult<($($name,)*)> {
-                match v.clone() {
+            fn from_graph_value(v: GraphValue) -> RedisResult<($($name,)*)> {
+                match v {
                     GraphValue::Array(mut items) => {
                         // hacky way to count the tuple size
                         let mut n = 0;
@@ -367,7 +367,7 @@ macro_rules! from_graph_value_for_tuple {
 
                         Ok(($({
                             let $name = ();
-                            FromGraphValue::from_graph_value(&items.remove(0))?
+                            FromGraphValue::from_graph_value(items.remove(0))?
                         },)*))
                     }
                     _ => Err(create_rediserror(&format!("Can not create Tuple from {:?}", v)))
@@ -447,9 +447,9 @@ impl FromRedisValue for Node {
 }
 
 impl FromGraphValue for Node {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
-            GraphValue::Node(node) => Ok(node.clone()),
+            GraphValue::Node(node) => Ok(node),
             _ => Err(create_rediserror(&format!(
                 "Cant convert {:?} to Node",
                 value
@@ -459,9 +459,9 @@ impl FromGraphValue for Node {
 }
 
 impl FromGraphValue for Relationship {
-    fn from_graph_value(value: &GraphValue) -> RedisResult<Self> {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
         match value {
-            GraphValue::Relation(rel) => Ok(rel.clone()),
+            GraphValue::Relation(rel) => Ok(rel),
             _ => Err(create_rediserror(&format!(
                 "Cant convert {:?} to Relationship",
                 value
