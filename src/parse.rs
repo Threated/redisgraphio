@@ -2,7 +2,6 @@ use indexmap::IndexMap;
 use redis::{from_redis_value, FromRedisValue, RedisResult, Value};
 use std::{
     collections::HashMap,
-    ops::{Deref, DerefMut},
 };
 
 use crate::{
@@ -29,24 +28,69 @@ mod types {
 /// An enum containing every possible type that can be returned by redisgraph
 #[derive(Clone, Debug, PartialEq)]
 pub enum GraphValue {
+    /// Value is Unknown and stored as a [redis::Value]
     Unknown(Value),
+    /// A Map as returned by
+    /// ```cypher
+    /// Return {a: 2, b: "Hello"}
+    /// ```
     Map(GraphMap),
+    /// A Point as returned by
+    /// ```cypher
+    /// Return point({latitude: 32.070794860, longitude: 34.820751118})
+    /// ```
     Point(GeoPoint),
+    /// A Path as returned by 
+    /// ```cypher
+    /// Match p=(:A)-[:B]->(:C) Return p
+    /// ```
     Path(GraphPath),
+    /// A Node as returned by 
+    /// ```cypher
+    /// Match (a:A) Return a
+    /// ```
     Node(Node),
-    Array(Vec<GraphValue>),
-    Integer(i64),
-    Double(f64),
-    String(String),
-    Boolean(bool),
+    /// A Relationship as returned by 
+    /// ```cypher
+    /// Match (:A)-[b:B]->(:C) Return b
+    /// ```
     Relation(Relationship),
+    /// A Array as returned by 
+    /// ```cypher
+    /// Return [1, 2.0, "Hi"]
+    /// ```
+    Array(Vec<GraphValue>),
+    /// A Integer as returned by 
+    /// ```cypher
+    /// Return 1337
+    /// ```
+    Integer(i64),
+    /// A Double as returned by 
+    /// ```cypher
+    /// Return 1337.0
+    /// ```
+    Double(f64),
+    /// A String as returned by 
+    /// ```cypher
+    /// Return '1337'
+    /// ```
+    String(String),
+    /// A Boolean as returned by 
+    /// ```cypher
+    /// Return true, false, 1=1
+    /// ```
+    Boolean(bool),
+    /// A Null type which is returned when an Optinal Match does not match
+    /// or when a property of a node is returned but the node does not have this property
     Null,
 }
 
 /// The type returned by the point method in cypher
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeoPoint {
+    /// latitude
     pub latitude: f32,
+    /// longitude
     pub longitude: f32,
 }
 
@@ -55,24 +99,17 @@ pub struct GeoPoint {
 pub struct GraphMap(pub HashMap<String, GraphValue>);
 
 impl GraphMap {
+    /// Take ownership of the underlying HashMap 
     pub fn into_inner(self) -> HashMap<String, GraphValue> {
         self.0
     }
-}
 
-impl Deref for GraphMap {
-    type Target = HashMap<String, GraphValue>;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for GraphMap {
-    #[inline(always)]
-    fn deref_mut(&mut self) -> &mut HashMap<String, GraphValue> {
-        &mut self.0
+    /// Gets a value by its key and converts it to a given return type
+    pub fn get<T: FromGraphValue>(&self, key: &str) -> RedisResult<Option<T>> {
+        match self.0.get(key) {
+            Some(val) => from_graph_value(val.clone()),
+            None => Ok(None),
+        }
     }
 }
 
@@ -88,6 +125,7 @@ pub struct Node {
 }
 
 impl Node {
+    /// Full constructor for Node
     pub fn new(id: i64, label_ids: Vec<i64>, properties: IndexMap<i64, GraphValue>) -> Self {
         Self {
             id,
@@ -113,6 +151,7 @@ pub struct Relationship {
 }
 
 impl Relationship {
+    /// Full constructor for Relationship
     pub fn new(
         id: i64,
         label_id: i64,
@@ -130,7 +169,9 @@ impl Relationship {
     }
 }
 
+/// Trait for unifying access to Node and Relationship properties
 pub trait PropertyAccess {
+    /// Returns a reference to the IndexMap containing the properties in order of definition and with the property key ids
     fn properties(&self) -> &IndexMap<i64, GraphValue>;
 
     /// get property by property label id
@@ -187,12 +228,13 @@ impl PropertyAccess for Relationship {
 /// Type for graph paths as returned by MATCH p=(\:A)-[\:B]->(\:C) RETURN p
 #[derive(Debug, PartialEq, Clone)]
 pub struct GraphPath {
+    /// Nodes of the GraphPath
     pub nodes: Vec<Node>,
+    /// Relationships of the GraphPath
     pub relationships: Vec<Relationship>,
 }
 
-/// ## Overview
-/// Trait for converting the response to an arbitray type which implents it
+/// Trait for converting the response to an arbitray type which implents the trait
 /// This is similar to the FromRedisValue trait from redis
 /// 
 /// ## Example
@@ -217,6 +259,7 @@ pub struct GraphPath {
 /// let data: Vec<MyType> = con.graph_query("graphname", query!("RETURN 1, ['a', 'b']"))?.data;
 /// ```
 pub trait FromGraphValue: Sized {
+    /// Converts the GraphValue to the implementing Type
     fn from_graph_value(value: GraphValue) -> RedisResult<Self>;
 }
 

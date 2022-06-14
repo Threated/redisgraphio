@@ -1,3 +1,6 @@
+//#![doc = include_str!("../Readme.md")]
+//#![deny(missing_docs)]
+
 mod parse;
 mod sync;
 mod helpers;
