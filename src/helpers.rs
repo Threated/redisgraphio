@@ -57,7 +57,7 @@ macro_rules! query {
         $(
             read_only = $ro;
         )?
-        crate::types::GraphQuery {
+        $crate::types::GraphQuery {
             query: $s, read_only, params: vec![]
         }
     }};
@@ -67,9 +67,9 @@ macro_rules! query {
         $(
             read_only = $ro;
         )?
-        crate::types::GraphQuery {
+        $crate::types::GraphQuery {
             query: $s, read_only, params: vec![$(
-                ($k, crate::types::Parameter::from($v)),
+                ($k, $crate::types::Parameter::from($v)),
             )*]
         }
     }}
