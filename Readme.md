@@ -89,7 +89,6 @@ async fn rider_example() -> RedisResult<()> {
 }
 ```
 
-With async feature inherited from the [redis](https://docs.rs/redis) crate (either: 'async-std-comp' or 'tokio-comp):
 
 ## Credit
 

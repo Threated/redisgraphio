@@ -1,5 +1,5 @@
-//#![doc = include_str!("../Readme.md")]
-//#![deny(missing_docs)]
+#![doc = include_str!("../Readme.md")]
+#![deny(missing_docs)]
 
 mod parse;
 mod sync;
@@ -18,5 +18,4 @@ mod aio;
 
 #[cfg(any(feature = "tokio-comp", feature = "async-std-comp"))]
 pub use crate::aio::AsyncGraphCommands;
-
 
