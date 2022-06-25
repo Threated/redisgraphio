@@ -1,6 +1,7 @@
 [package]
 name = "redisgraphio"
 version = "0.1.0"
+description = "Client library for working with redis graph"
 license = "MIT"
 keywords = ["redis", "database", "redisgraph"]
 categories = ["database-implementations", "database"]
