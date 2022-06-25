@@ -1,6 +1,6 @@
 use crate::{
     query, GeoPoint, GraphCommands, GraphMap, GraphPath, GraphQuery, GraphValue,
-    PropertyAccess
+    PropertyAccess, GraphStatistic
 };
 
 use paste::paste;
@@ -207,11 +207,16 @@ fn test_parse_graphtypes() {
         assert_eq!(relationships[0].get_property_by_index::<i32>(0).unwrap(), 3);
     }
 
-    con.graph_query_void(
+    let res = con.graph_query_void(
         "test",
         query!("Match (a:User {a: 1})-[:follows]->(b:User) Detach Delete a, b"),
     )
     .unwrap();
+
+    assert!(res.get_statistic(GraphStatistic::ExecutionTime).is_some());
+    assert!(res.get_statistic(GraphStatistic::CachedExecution).is_some());
+    assert_eq!(res.get_statistic(GraphStatistic::NodesDeleted), Some(2.0));
+    assert_eq!(res.get_statistic(GraphStatistic::RelationshipsDeleted), Some(1.0));
 }
 
 #[test]

@@ -65,12 +65,67 @@ impl<T: FromGraphValue> GraphResponse<T> {
             _ => Err(create_rediserror("Invalid Response from Redis"))
         }
     }
+
+    /// Try to get the value of the requested statistic
+    pub fn get_statistic(&self, stat: GraphStatistic) -> Option<f64> {
+        let start = stat.match_name();
+        for str in self.statistics.iter() {
+            if str.starts_with(start) {
+                let (_, val) = str.split_once(": ")?;
+                let val = val.split_once(' ').map_or(val, |x| x.0);
+                return Some(val.parse().unwrap())
+            }
+        }
+        None
+    }
 }
 
 
 impl<T: FromGraphValue> FromRedisValue for GraphResponse<T> {
     fn from_redis_value(v: &Value) -> RedisResult<GraphResponse<T>> {
         GraphResponse::parse_response(v)
+    }
+}
+
+/// Execution statistics
+pub enum GraphStatistic {
+    /// Number of labels added
+    LabelsAdded,
+    /// Number of nodes created
+    NodesCreated,
+    /// Number of relationships created
+    RelationshipsCreated,
+    /// Number of indices created
+    IndicesCreated,
+    /// Number of properties set
+    PropertiesSet,
+    /// Number of nodes deleted
+    NodesDeleted,
+    /// Number of relationships deleted
+    RelationshipsDeleted,
+    /// Number of indices deleted
+    IndicesDeleted,
+    /// Whether the query was cached
+    CachedExecution,
+    /// Internal execution time of the redis server
+    ExecutionTime,
+}
+
+impl GraphStatistic {
+    #[inline]
+    pub(crate) const fn match_name(&self) -> &'static str{
+        match self {
+            GraphStatistic::LabelsAdded => "Labels added",
+            GraphStatistic::NodesCreated => "Nodes created",
+            GraphStatistic::RelationshipsCreated => "Relationships created",
+            GraphStatistic::IndicesCreated => "Indices created",
+            GraphStatistic::PropertiesSet => "Properties set",
+            GraphStatistic::NodesDeleted => "Nodes deleted",
+            GraphStatistic::RelationshipsDeleted => "Relationships deleted",
+            GraphStatistic::IndicesDeleted => "Indices deleted",
+            GraphStatistic::CachedExecution => "Cached execution",
+            GraphStatistic::ExecutionTime =>  "Query internal",
+        }
     }
 }
 
