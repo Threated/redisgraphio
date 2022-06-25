@@ -7,9 +7,9 @@ This is a rust client library for working with the [RedisGraph](https://oss.redi
 It works in conjunction with [redis-rs](https://docs.rs/redis) by implementing a trait for the redis connection.
 
 ### Features
-- Async support
-- Query parameter escaping
-- Serialisation into custom types
+- [Async support](#asynchronous-usage)
+- [Serialisation](https://docs.rs/redisgraphio/latest/redisgraphio/trait.FromGraphValue.html) into custom types
+- Query parameter escaping (See below)
 
 
 ## Synchronous usage

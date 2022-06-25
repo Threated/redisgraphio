@@ -1,6 +1,13 @@
 [package]
 name = "redisgraphio"
 version = "0.1.0"
+license = "MIT"
+keywords = ["redis", "database", "redisgraph"]
+categories = ["database-implementations", "database"]
+homepage = "https://github.com/redis-rs/redis-rs"
+repository = "https://github.com/Threated/redisgraphio"
+documentation = "https://docs.rs/redisgraphio"
+readme = "README.md"
 edition = "2021"
 
 [dependencies]
