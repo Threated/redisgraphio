@@ -16,7 +16,7 @@ It works in conjunction with [redis-rs](https://docs.rs/redis) by implementing a
 ```toml
 [dependencies]
 redis = "0.21" # or higher
-redisgraphio = "0.1"
+redisgraphio = "0.2"
 ```
  
 ```rust
@@ -56,7 +56,7 @@ To enable the redisgraphio async commands either enable the `tokio-comp` or `asy
 ```toml
 [dependencies]
 redis = "0.21.0"
-redis-graph = { version = "0.1", features = ['tokio-comp'] }
+redis-graph = { version = "0.2", features = ['tokio-comp'] }
 ```
 
 ```rust
