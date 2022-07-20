@@ -270,7 +270,7 @@ macro_rules! from_graph_value_for_int {
         impl FromGraphValue for $t {
             fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
                 match value {
-                    GraphValue::Integer(val) => Ok(val as $t),
+                    GraphValue::Integer(val) => <$t>::try_from(val).map_err(|_| create_rediserror(concat!("Could not convert to ", stringify!($t)))),
                     _ => Err(create_rediserror(&format!(
                         concat!("Cant convert {:?} to ", stringify!($t)),
                         value
@@ -282,20 +282,16 @@ macro_rules! from_graph_value_for_int {
 }
 
 /// Macro for implementing the FromGraphValue Trait for a float type
-macro_rules! from_graph_value_for_float {
-    ( $t:ty ) => {
-        impl FromGraphValue for $t {
-            fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
-                match value {
-                    GraphValue::Double(val) => Ok(val as $t),
-                    _ => Err(create_rediserror(&format!(
-                        concat!("Cant convert {:?} to ", stringify!($t)),
-                        value
-                    ))),
-                }
-            }
+impl FromGraphValue for f64 {
+    fn from_graph_value(value: GraphValue) -> RedisResult<Self> {
+        match value {
+            GraphValue::Double(val) => Ok(val),
+            _ => Err(create_rediserror(&format!(
+                concat!("Cant convert {:?} to ", stringify!($t)),
+                value
+            ))),
         }
-    };
+    }
 }
 apply_macro!(
     from_graph_value_for_int,
@@ -308,7 +304,6 @@ apply_macro!(
     u32,
     u64
 );
-apply_macro!(from_graph_value_for_float, f32, f64);
 
 impl FromGraphValue for bool {
     fn from_graph_value(value: GraphValue) -> RedisResult<Self> {

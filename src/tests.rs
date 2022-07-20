@@ -117,8 +117,8 @@ test_parse! {ints,
 test_parse! {double,
     query!("Return 1.0, 3.3, 4.67"),
     {
-        f32 => 1.0,
-        f32 => 3.3,
+        f64 => 1.0,
+        f64 => 3.3,
         f64 => 4.67
     }
 }
